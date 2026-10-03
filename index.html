@@ -189,7 +189,7 @@
       </header>
       <div class="intro">
         <h1>Too brilliant to play alone.</h1>
-        <p>Two friends. Seven letters. Three minutes to beat the clock.</p>
+        <p>Two friends. Seven letters. One minute to beat the clock.</p>
       </div>
       <div id="connection" class="status-strip"><span><span class="dot"></span><span id="connection-text">Connecting to your teammate</span></span><span id="role"></span></div>
     </div>
@@ -211,7 +211,7 @@
       </section>
       <div id="game" class="hidden">
         <div class="scoreboard" aria-label="Team game status">
-          <div class="stat"><span class="label">Time left</span><span id="timer" class="value">3:00</span></div>
+          <div class="stat"><span class="label">Time left</span><span id="timer" class="value">1:00</span></div>
           <div class="stat"><span class="label">Team points</span><span id="score" class="value">0</span></div>
           <div class="stat"><span class="label">Hints left</span><span id="hints" class="value">2</span></div>
         </div>
@@ -305,7 +305,7 @@ let SECRET = PUZZLES[0].secret;
 let LETTERS = [...SECRET];
 let SHORT_WORDS = new Set(PUZZLES[0].words.trim().split(/\s+/));
 const REVEAL_ORDER = [2, 5, 0, 4, 1, 6, 3];
-const ROUND_SECONDS = 180;
+const ROUND_SECONDS = 60;
 const PRAISE = [
   'You are amazing!',
   'You are a rockstar!',
@@ -439,7 +439,8 @@ function launchReadyRound(round, state) {
   const nextPuzzle = round ? ((round.puzzle || 0) + 1) % PUZZLES.length : 0;
   meta.set('round', {
     id: uniqueId(), at: Date.now(), players: [state.request.by, state.join.by],
-    puzzle: nextPuzzle, wheelOrder: jumbledOrder(PUZZLES[nextPuzzle].secret)
+    puzzle: nextPuzzle, wheelOrder: jumbledOrder(PUZZLES[nextPuzzle].secret),
+    durationSeconds: ROUND_SECONDS
   });
   return true;
 }
@@ -463,6 +464,8 @@ function nextHidden(revealed) {
 function derive(now = Date.now()) {
   const round = roundData();
   if (!round) return null;
+  const roundSeconds = Number.isInteger(round.durationSeconds) && round.durationSeconds > 0
+    ? round.durationSeconds : 180;
   const events = sortedActions(round);
   const solved = new Map();
   const revealed = new Set();
@@ -473,7 +476,7 @@ function derive(now = Date.now()) {
   let winRemaining = 0;
   for (const action of events) {
     const at = Math.max(round.at, Number(action.at) || round.at);
-    const remainingBefore = Math.ceil((round.at + ROUND_SECONDS * 1000 - at) / 1000) - penalties;
+    const remainingBefore = Math.ceil((round.at + roundSeconds * 1000 - at) / 1000) - penalties;
     if (won || remainingBefore <= 0) continue;
     let result = 'ignored';
     let revealedLetter = '';
@@ -514,7 +517,7 @@ function derive(now = Date.now()) {
     }
     outcomes.push({ action, result, foundCount: solved.size, revealedLetter });
   }
-  const remaining = won ? winRemaining : Math.max(0, Math.ceil((round.at + ROUND_SECONDS * 1000 - now) / 1000) - penalties);
+  const remaining = won ? winRemaining : Math.max(0, Math.ceil((round.at + roundSeconds * 1000 - now) / 1000) - penalties);
   const scoreBeforeHint = [...solved.keys()].reduce((sum, word) => sum + 10 * word.length, 0) + (won ? 100 + winRemaining : 0);
   return {
     round, events, outcomes, solved, revealed, hintsUsed, remaining,
@@ -682,7 +685,7 @@ function render() {
     const hosting = next.request && next.request.by === net.id;
     el('gate-title').textContent = next.request ? hosting ? 'Waiting for your teammate' : 'Your friend is waiting' : 'Ready for a brainy challenge?';
     el('gate-copy').textContent = next.request
-      ? hosting ? 'Send this page link to your teammate. The next round starts when they tap Join the round.' : 'Join your friend for a fresh three-minute word puzzle.'
+      ? hosting ? 'Send this page link to your teammate. The next round starts when they tap Join the round.' : 'Join your friend for a fresh one-minute word puzzle.'
       : 'Start a round, then invite a friend with this page link.';
     el('start').classList.toggle('hidden', !!next.request);
     el('join').classList.toggle('hidden', !next.request || hosting);
