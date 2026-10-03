@@ -207,8 +207,7 @@
         <div class="big" aria-hidden="true">◌</div>
         <h2 id="gate-title">Connecting</h2>
         <p id="gate-copy">Getting your team room ready.</p>
-        <button id="start" class="primary hidden" type="button">Start a round</button>
-        <button id="join" class="primary hidden" type="button">Join the round</button>
+        <button id="start" class="primary hidden" type="button">Create a game</button>
         <button id="copy-link" class="secondary hidden" type="button">Copy invite link</button>
         <p id="gate-status" class="waiting-note" role="status" aria-live="polite"></p>
       </section>
@@ -410,6 +409,9 @@ function activatePuzzle(round) {
   order = validOrder(round.wheelOrder) ? [...round.wheelOrder] : jumbledOrder(SECRET);
   previousRevealed = new Set();
   lastAnnounced = '';
+  clearTimeout(messageTimer);
+  el('message').textContent = '';
+  el('message').className = 'message';
   buildWheel();
 }
 function lobbyState(round, ids) {
@@ -436,20 +438,25 @@ function requestRound() {
 function joinRound() {
   const round = roundData();
   const state = lobbyState(round, activeIds());
-  if (!state.request || state.request.by === net.id || state.join) return;
+  if (!state.request || state.request.by === net.id || state.join) return false;
   gateNotice = '';
   const id = uniqueId();
   lobby.set('join|' + state.base + '|' + net.id + '|' + id, {
     id, base: state.base, by: net.id, kind: 'join', request: state.request.id, at: Date.now()
   });
+  return true;
 }
 function launchReadyRound(round, state) {
-  if (!state.request || !state.join || state.request.by !== net.id || startingBase === state.base) return false;
+  // The invited player starts the shared round. The host can be on a backgrounded phone
+  // after sending the link, so the game must not depend on the host's next render.
+  if (!state.request || !state.join || state.join.by !== net.id || startingBase === state.base) return false;
   startingBase = state.base;
   gateNotice = '';
   const nextPuzzle = round ? ((round.puzzle || 0) + 1) % PUZZLES.length : 0;
+  const players = round && round.players.includes(state.request.by) && round.players.includes(state.join.by)
+    ? round.players : [state.request.by, state.join.by];
   meta.set('round', {
-    id: uniqueId(), at: Date.now(), players: [state.request.by, state.join.by],
+    id: uniqueId(), at: Date.now(), players,
     puzzle: nextPuzzle, wheelOrder: jumbledOrder(PUZZLES[nextPuzzle].secret),
     durationSeconds: ROUND_SECONDS
   });
@@ -759,12 +766,19 @@ function render() {
   const ids = activeIds();
   const round = roundData();
   if (round) activatePuzzle(round);
-  const connected = ids.length >= 2;
-  el('connection').classList.toggle('connected', connected);
-  el('connection-text').textContent = connected ? 'Both teammates connected' : 'Waiting for teammate';
   const data = round ? derive() : null;
   const next = lobbyState(round, ids);
+  if ((!round || data.status !== 'playing') && next.request && next.request.by !== net.id && !next.join) {
+    if (joinRound()) { queueMicrotask(render); return; }
+  }
   if ((!round || data.status !== 'playing') && launchReadyRound(round, next)) return;
+  const connected = data && data.status === 'playing'
+    ? round.players.every(id => ids.includes(id))
+    : !!(next.request && next.join);
+  el('connection').classList.toggle('connected', connected);
+  el('connection-text').textContent = connected ? 'Both teammates ready'
+    : next.request ? next.request.by === net.id ? 'Waiting for your friend' : 'Joining your friend'
+    : data ? 'Round finished' : 'Create a game to invite a friend';
   const waiting = !round || (data.status !== 'playing' && !!next.request);
   const roleIndex = round ? round.players.indexOf(net.id) : -1;
   el('role').textContent = next.request && waiting
@@ -776,16 +790,15 @@ function render() {
     el('gate').classList.remove('hidden');
     el('game').classList.add('hidden');
     const hosting = next.request && next.request.by === net.id;
-    el('gate-title').textContent = next.request ? hosting ? 'Waiting for your teammate' : 'Your friend is waiting' : 'Ready for a brainy challenge?';
+    el('gate-title').textContent = next.request ? hosting ? 'Invite your friend' : 'Joining your friend' : 'Ready to play together?';
     el('gate-copy').textContent = next.request
-      ? hosting ? 'Send this page link to your teammate. The next round starts when they tap Join the round.' : 'Join your friend for a fresh one-minute word puzzle.'
-      : 'Start a round, then invite a friend with this page link.';
+      ? hosting ? 'Copy the invite link and send it to your friend. Keep this page open. The game starts when they open the link.' : 'Your one-minute word puzzle will start automatically.'
+      : 'Create a game, then send your friend the invite link. They join just by opening it.';
     el('start').classList.toggle('hidden', !!next.request);
-    el('join').classList.toggle('hidden', !next.request || hosting);
     el('copy-link').classList.toggle('hidden', !hosting);
     el('gate-status').textContent = gateNotice || (hosting
-      ? connected ? 'Your teammate is here. Waiting for them to join.' : 'Waiting for your teammate to open the link.'
-      : '');
+      ? 'Room ' + new URL(location.href).searchParams.get('room') + ' · waiting for your friend to open the invite.'
+      : next.request ? 'Connecting your team...' : '');
     initialRender = false;
     return;
   }
@@ -841,6 +854,7 @@ function drawSelection() {
 function chooseLetter(index) {
   if (!net || !derive() || derive().status !== 'playing') return;
   if (!roundData().players.includes(net.id) || chosen.includes(index)) return;
+  wakeMusic();
   chosen.push(index);
   speakLetter(LETTERS[index]);
   drawSelection();
@@ -924,7 +938,6 @@ el('fresh').addEventListener('click', () => {
   location.assign(freshUrl.href);
 });
 el('start').addEventListener('click', () => { wakeMusic(); requestRound(); });
-el('join').addEventListener('click', () => { wakeMusic(); joinRound(); });
 el('again').addEventListener('click', () => { wakeMusic(); requestRound(); });
 el('copy-link').addEventListener('click', async () => {
   try {
@@ -987,8 +1000,10 @@ if (teamUrl.searchParams.has('left')) {
   el('sound').classList.add('hidden');
   el('exit').classList.add('hidden');
 } else {
-  if (!teamUrl.searchParams.get('room')) {
-    teamUrl.searchParams.set('room', uniqueId().slice(0, 12));
+  const requestedRoom = teamUrl.searchParams.get('room') || '';
+  const roomCode = requestedRoom.match(/^[A-Za-z0-9_-]{1,64}/)?.[0] || uniqueId().slice(0, 12);
+  if (roomCode !== requestedRoom) {
+    teamUrl.searchParams.set('room', roomCode);
     try { history.replaceState(null, '', teamUrl.href); } catch {}
   }
   try {
