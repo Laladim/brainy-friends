@@ -116,7 +116,9 @@
   .word-group li { display: flex; align-items: center; justify-content: space-between; min-height: clamp(22px, 3.4dvh, 28px); border-top: 1px solid rgba(153, 81, 100, .13); font-size: clamp(13px, 2dvh, 16px); }
   .word-group li .pattern { font-weight: 850; letter-spacing: .08em; white-space: nowrap; }
   .word-group li.solved .pattern { color: #ae285b; letter-spacing: .01em; }
-  .word-group li .credit { color: var(--muted); font-size: 11px; font-weight: 850; }
+  .word-group li .credit { color: var(--muted); font-size: 11px; font-weight: 850; white-space: nowrap; }
+  .word-group li.newest { background: rgba(248, 50, 121, .08); }
+  .word-group li.waiting .pattern { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: 0; }
   .entry-area { position: relative; min-height: 0; display: grid; grid-template-rows: 30px minmax(0, 1fr) 44px 44px; gap: clamp(3px, .6dvh, 6px); }
   .preview { display: grid; place-items: center; min-height: 0; padding: 2px 7px; border-radius: 11px; background: var(--rose); text-align: center; font-size: 21px; font-weight: 900; letter-spacing: .12em; }
   .preview.empty { color: var(--muted); font-size: 13px; font-weight: 650; letter-spacing: 0; }
@@ -214,16 +216,16 @@
           <div class="stat"><span class="label">Hints left</span><span id="hints" class="value">2</span></div>
         </div>
         <section class="answer-panel" aria-label="Seven-letter answer">
-          <h2>The team word</h2>
+          <h2>Every real word reveals a letter</h2>
           <div id="answer-slots" class="answer-slots"></div>
-          <p class="rules">Each smaller word reveals a letter. A different smaller word costs 10 seconds. A wrong team word costs 20 seconds.</p>
+          <p class="rules">Any real two- to six-letter word reveals a letter in the team word. A word outside the game dictionary costs 10 seconds. A wrong team word costs 20 seconds.</p>
         </section>
-        <section class="word-board" aria-label="Six smaller words">
+        <section class="word-board" aria-label="Words found by each teammate">
           <div class="word-group"><h3>Player 1 words</h3><ol id="words-one"></ol></div>
           <div class="word-group"><h3>Player 2 words</h3><ol id="words-two"></ol></div>
         </section>
         <div class="entry-area">
-          <div id="preview" class="preview empty" aria-live="polite">Tap or trace letters to make a word</div>
+          <div id="preview" class="preview empty" aria-live="polite">Make any real 2-6 letter word</div>
           <div id="wheel" class="wheel" aria-label="Letter wheel">
             <svg id="trace" viewBox="0 0 280 280" aria-hidden="true"><polyline id="trace-line" points=""></polyline></svg>
             <button id="shuffle" class="shuffle" type="button" aria-label="Shuffle letters">Shuffle<br>letters</button>
@@ -252,27 +254,56 @@
 <div id="confetti-layer" class="confetti-layer" aria-hidden="true"></div>
 <script type="module">
 const APP = 'Brainy Friends';
+// Offline word banks from the macOS English dictionary, with simple plural and past forms.
 const PUZZLES = [
-  { secret: 'HARVEST', targets: [
-    { word: 'HEART', group: 1 }, { word: 'STAR', group: 1 }, { word: 'VASE', group: 1 },
-    { word: 'SHARE', group: 2 }, { word: 'HEAT', group: 2 }, { word: 'SAVE', group: 2 }
-  ] },
-  { secret: 'PLANTED', targets: [
-    { word: 'PLANT', group: 1 }, { word: 'LAND', group: 1 }, { word: 'TEND', group: 1 },
-    { word: 'PLAN', group: 2 }, { word: 'LEAD', group: 2 }, { word: 'PLEA', group: 2 }
-  ] },
-  { secret: 'ORANGES', targets: [
-    { word: 'ORANGE', group: 1 }, { word: 'GEAR', group: 1 }, { word: 'ROSE', group: 1 },
-    { word: 'RANGE', group: 2 }, { word: 'EARN', group: 2 }, { word: 'RAGE', group: 2 }
-  ] },
-  { secret: 'FLOWERS', targets: [
-    { word: 'FLOWER', group: 1 }, { word: 'SLOW', group: 1 }, { word: 'ROSE', group: 1 },
-    { word: 'LOWER', group: 2 }, { word: 'WORE', group: 2 }, { word: 'SOLE', group: 2 }
-  ] }
+  { secret: 'HARVEST', words: `
+    AER AES AH ARE ARSE ART AS ASE ASH ASHET AST ASTER AT ATE ATES AVE AVER AVERS AVERT AVERTS EAR EARTH
+    EARTHS EAST EAT EATS EH ER ERA ERS ERTH ERTHS ETA HAET HAETS HARE HARES HART HARTS HASTE HASTER HAT
+    HATE HATER HATERS HATES HAVE HAVER HAVERS HAVES HE HEAR HEARS HEARST HEART HEARTS HEAT HEATS HER HERS
+    HEST HET RAH RAS RASE RASH RAT RATE RATES RATH RATHE RATHES RATHS RAVE RAVES REA REH RESH REST RET REV
+    RHE RHEA RHEAS SAH SAR SARE SART SAT SATE SAVE SAVER SEA SEAH SEAR SEAT SER SERA SERT SERTA SET SETA
+    SETH SHA SHARE SHAT SHAVE SHAVER SHE SHEA SHEAR SHEAT SHER SHEVA SHRAVE STAR STARE STARVE STAVE STAVER
+    STRA STRAE STRAVE STRE TAE TAHR TAHRS TAR TARE TARES TARS TARSE TARVE TARVES TASH TAV TAVE TAVER
+    TAVERS TAVES TEA TEAR TEARS TERA TERAS THA THAR THARS THAVE THAVES THE THRAVE TRA TRAH TRAHS TRASH
+    TRAVE TRAVES TSAR VARE VARES VAS VASE VAST VAT VERA VERAS VERST VERSTA VERT VERTS VEST VET VETA VETAS
+  ` },
+  { secret: 'PLANTED', words: `
+    ADE ADEPT ADET ADLET ALE ALEN ALN ALP ALT AN AND ANT ANTE ANTED APE APT AT ATE ATLE ATLED DAE DAL DALE
+    DALT DAN DAP DATE DEAL DEALT DEAN DELTA DEN DENAT DENT DENTAL DEPA EAN EAT ELAND ELD ELT ENAPT END
+    ENTAD ENTAL ETA ETNA LAD LADE LADEN LAET LAN LAND LANE LANED LANT LAP LAT LATE LATED LATEN LEA LEAD
+    LEAN LEANT LEAP LEAPT LEAT LED LENAD LEND LENT LEPA LET NAE NAEL NAP NAPE NAPED NAT NEA NEAL NEAP NEAT
+    NEP NET PAD PADLE PAL PALE PALED PALET PALT PAN PAND PANDLE PANE PANED PANEL PANT PANTLE PAT PATE
+    PATED PATEL PATEN PEA PEAL PEAN PEAT PED PEDA PEDAL PEDANT PELT PELTA PEN PENAL PEND PENDA PENT PENTA
+    PENTAD PET PETAL PLAN PLANE PLANED PLANET PLANT PLAT PLATE PLATED PLATEN PLEA PLEAD PLEAT PLED TAD
+    TADE TAE TAEL TAEN TAL TALD TALE TALED TAN TANDLE TANE TANED TAP TAPE TAPED TAPEN TEA TEAD TEAL TEAN
+    TEAP TED TEN TEND TEPAL
+  ` },
+  { secret: 'ORANGES', words: `
+    AEON AEONS AER AERO AEROS AES AGE AGEN AGENS AGER AGERS AGO AGON AGONE AGONES AGONS AGRE AGRES AN ANES
+    ANGER ANGERS ANGO ANGOR ANGORS ANGOS ARE ARENG ARENGS ARGO ARGON ARGONS ARGOS ARN AROSE ARSE ARSENO
+    ARSON AS ASE ASOR EAN EAR EARN EARNS EGO ENS EOAN EOANS EON ER ERA ERG ERGON ERGONS EROS ERS GAEN
+    GAENS GAN GANE GANES GAR GARE GARES GARN GARNS GARSE GAS GEAN GEANS GEAR GEARS GEASON GEN GENA GENAS
+    GENOS GENRO GENROS GENS GEO GER GERS GNAR GNARS GO GOA GOER GOERS GOES GON GONE GONER GONERS GONES GOR
+    GORA GORAN GORANS GORAS GORE GORES GORSE GOS GRA GRANE GRANES GRANO GRANOS GROAN GROANS GROS NAE NAG
+    NAGOR NAGORS NAOS NAR NARES NEA NEAR NEARS NEGRO NEGROS NEO NO NOA NOG NOR NOSE NOSER OAR OER OES OGRE
+    OGRES ON ONA ONAGER ONE ONER ONERS ONS OR ORA ORAGE ORAGES ORANG ORANGE ORANGS ORE ORGAN ORGANS ORNA
+    ORNAS OSE RAG RAGE RAGES RAN RANE RANES RANG RANGE RANGES RANGS RAS RASE RASEN REA REASON REG ROAN
+    ROANS ROE ROG ROGAN ROGANS RONE RONES ROSE SAG SAGE SAGO SAN SANE SANG SANGER SAO SAR SARE SARGO SARON
+    SARONG SEA SEAR SEG SEGO SEN SER SERA SERANG SERO SERON SNAG SNARE SNOG SNOGA SNORE SO SOAR SOE SOG
+    SOGER SON SONAR SONG SORA SORAGE SORE SORN
+  ` },
+  { secret: 'FLOWERS', words: `
+    ELF ELS ER EROS ERS FELS FEW FLEW FLEWS FLOE FLOES FLORES FLOW FLOWER FLOWS FOE FOLE FOLES FOR FORE
+    FOREL FORELS FORES FOW FOWL FOWLER FOWLS FRO FROE FROES FROW FROWL FROWLS FROWS LEW LOF LORE LORES
+    LORS LOSE LOSER LOW LOWER LOWERS OER OES OF OR ORE ORF ORLE ORLES ORSEL OSE OWE OWER OWERS OWL OWLER
+    OWLERS OWSE OWSER REF REFLOW REL RESOW ROE ROLE ROLES ROSE ROSEL ROW ROWEL ROWELS SELF SER SERF SERO
+    SEROW SEW SLEW SLOE SLOW SO SOE SOL SOLE SOLER SORE SOW SOWEL SOWER SOWL SOWLE SWORE WE WELS WER WERF
+    WERFS WOE WOLF WOLFER WOLFS WORE WORES WORSE WRO
+  ` }
 ];
 let SECRET = PUZZLES[0].secret;
 let LETTERS = [...SECRET];
-let TARGETS = PUZZLES[0].targets;
+let SHORT_WORDS = new Set(PUZZLES[0].words.trim().split(/\s+/));
 const REVEAL_ORDER = [2, 5, 0, 4, 1, 6, 3];
 const ROUND_SECONDS = 180;
 const PRAISE = [
@@ -363,7 +394,7 @@ function activatePuzzle(round) {
   currentRoundId = round.id;
   SECRET = PUZZLES[index].secret;
   LETTERS = [...SECRET];
-  TARGETS = PUZZLES[index].targets;
+  SHORT_WORDS = new Set(PUZZLES[index].words.trim().split(/\s+/));
   chosen = [];
   order = validOrder(round.wheelOrder) ? [...round.wheelOrder] : jumbledOrder(SECRET);
   previousRevealed = new Set();
@@ -445,21 +476,26 @@ function derive(now = Date.now()) {
     const remainingBefore = Math.ceil((round.at + ROUND_SECONDS * 1000 - at) / 1000) - penalties;
     if (won || remainingBefore <= 0) continue;
     let result = 'ignored';
+    let revealedLetter = '';
     if (action.kind === 'hint') {
       const position = nextHidden(revealed);
       if (hintsUsed < 2 && position !== undefined) {
         hintsUsed++;
         revealed.add(position);
+        revealedLetter = SECRET[position];
         result = 'hint';
       }
     } else if (action.kind === 'short') {
-      const target = TARGETS.find(item => item.word === action.word);
-      if (target && !solved.has(action.word)) {
+      const realWord = SHORT_WORDS.has(action.word);
+      if (realWord && !solved.has(action.word)) {
         solved.set(action.word, action.by);
         const position = nextHidden(revealed);
-        if (position !== undefined) revealed.add(position);
+        if (position !== undefined) {
+          revealed.add(position);
+          revealedLetter = SECRET[position];
+        }
         result = 'found';
-      } else if (target) {
+      } else if (realWord) {
         result = 'repeat';
       } else {
         penalties += 10;
@@ -476,7 +512,7 @@ function derive(now = Date.now()) {
         result = 'final-wrong';
       }
     }
-    outcomes.push({ action, result, foundCount: solved.size });
+    outcomes.push({ action, result, foundCount: solved.size, revealedLetter });
   }
   const remaining = won ? winRemaining : Math.max(0, Math.ceil((round.at + ROUND_SECONDS * 1000 - now) / 1000) - penalties);
   const scoreBeforeHint = [...solved.keys()].reduce((sum, word) => sum + 10 * word.length, 0) + (won ? 100 + winRemaining : 0);
@@ -553,7 +589,8 @@ function announceLatest(data) {
   if (latest.action.id === lastAnnounced) return;
   lastAnnounced = latest.action.id;
   if (latest.result === 'found') {
-    showMessage('Great job! ' + PRAISE[(latest.foundCount - 1) % PRAISE.length], false, true);
+    const reveal = latest.revealedLetter ? latest.revealedLetter + ' appeared above. ' : '';
+    showMessage('Great job! ' + reveal + PRAISE[(latest.foundCount - 1) % PRAISE.length], false, true);
     burstConfetti();
     playVoice('GREAT', true);
   }
@@ -562,29 +599,35 @@ function announceLatest(data) {
     burstConfetti(true);
     playVoice('GREAT', true);
   }
-  if (latest.result === 'hint') showMessage('A new letter appeared. You can do this!');
+  if (latest.result === 'hint') showMessage(latest.revealedLetter + ' appeared above. You can do this!');
   if (latest.result === 'repeat') showMessage('You already found that word. Keep going!');
-  if (latest.result === 'short-wrong') showMessage('Not one of the six words. 10 seconds off.', true);
+  if (latest.result === 'short-wrong') showMessage('That is not in our word list. 10 seconds off.', true);
   if (latest.result === 'final-wrong') showMessage('Try another team word. 20 seconds off.', true);
 }
 function drawTargets(data) {
   for (const group of [1, 2]) {
     const list = el(group === 1 ? 'words-one' : 'words-two');
+    const player = data.round.players[group - 1];
+    const found = data.outcomes.filter(item => item.result === 'found' && item.action.by === player);
+    const recent = found.slice(-3).reverse();
+    list.closest('.word-group').querySelector('h3').textContent = found.length > 3
+      ? 'Player ' + group + ': last 3 of ' + found.length
+      : 'Player ' + group + ' words (' + found.length + ')';
     list.replaceChildren();
-    for (const target of TARGETS.filter(item => item.group === group)) {
+    for (let index = 0; index < 3; index++) {
       const row = document.createElement('li');
       const pattern = document.createElement('span');
       const credit = document.createElement('span');
-      const by = data.solved.get(target.word);
       pattern.className = 'pattern';
       credit.className = 'credit';
-      if (by) {
-        row.className = 'solved';
-        pattern.textContent = target.word;
-        credit.textContent = by === data.round.players[0] ? 'by Player 1' : 'by Player 2';
+      if (recent[index]) {
+        const item = recent[index];
+        row.className = 'solved' + (index === 0 ? ' newest' : '');
+        pattern.textContent = item.action.word;
+        credit.textContent = item.revealedLetter ? item.revealedLetter + ' above' : '+' + 10 * item.action.word.length;
       } else {
-        pattern.textContent = '□ '.repeat(target.word.length).trim();
-        credit.textContent = target.word.length + ' letters';
+        row.className = 'waiting';
+        if (index === recent.length) pattern.textContent = found.length ? 'Find another' : 'Find any word';
       }
       row.append(pattern, credit);
       list.append(row);
@@ -686,7 +729,7 @@ function selectedWord() {
 function drawSelection() {
   const preview = el('preview');
   const word = selectedWord();
-  preview.textContent = word || 'Tap or trace letters to make a word';
+  preview.textContent = word || 'Make any real 2-6 letter word';
   preview.classList.toggle('empty', !word);
   for (let index = 0; index < letterButtons.length; index++) letterButtons[index].classList.toggle('selected', chosen.includes(index));
   const bounds = wheel.getBoundingClientRect();
@@ -713,8 +756,8 @@ function submitWord() {
   const data = derive();
   if (!data || data.status !== 'playing' || !data.round.players.includes(net.id)) return;
   const word = selectedWord();
-  if (word.length < 3) {
-    showMessage('Choose at least three letters.');
+  if (word.length < 2) {
+    showMessage('Choose at least two letters.');
     return;
   }
   addAction(word.length === 7 ? 'final' : 'short', word);
