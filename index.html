@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#e5f2f2">
+<title>Brainy Friends | A word game for two</title>
+<style>
+  :root {
+    color-scheme: light;
+    --sky: #e5f2f2;
+    --paper: #fefffc;
+    --ink: #163b45;
+    --teal: #276f6c;
+    --teal-dark: #17514f;
+    --gold: #d7a44b;
+    --gold-light: #f7e9c9;
+    --line: #bfd8d4;
+    --muted: #4b676a;
+    --warning: #a83f43;
+    --shadow: 0 18px 60px rgba(26, 68, 70, .13);
+  }
+  * { box-sizing: border-box; }
+  html { min-height: 100%; background: var(--sky); }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 92% 4%, rgba(255, 218, 143, .42), transparent 28rem),
+      radial-gradient(circle at 4% 94%, rgba(118, 183, 173, .3), transparent 24rem),
+      var(--sky);
+    font: 500 17px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible { outline: 4px solid var(--gold); outline-offset: 3px; }
+  button:disabled { cursor: not-allowed; opacity: .48; }
+  .hidden { display: none !important; }
+  .shell { width: min(100%, 540px); min-height: 100vh; margin: 0 auto; padding: 16px 14px 28px; }
+  .sheet {
+    min-height: calc(100vh - 44px);
+    border: 2px solid rgba(39, 111, 108, .18);
+    border-radius: 30px;
+    background: var(--paper);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 20px 12px;
+  }
+  .mark {
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    border-radius: 15px;
+    color: var(--ink);
+    background: var(--gold-light);
+    border: 2px solid var(--gold);
+    font-size: 25px;
+    font-weight: 850;
+    line-height: 1;
+  }
+  .brand { flex: 1; min-width: 0; }
+  .brand strong { display: block; font-size: 20px; line-height: 1.1; letter-spacing: -.035em; }
+  .brand span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .sound {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 2px solid var(--line);
+    color: var(--ink);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 750;
+  }
+  .intro { padding: 0 20px 14px; }
+  .intro h1 { margin: 2px 0 3px; font-size: clamp(24px, 6vw, 31px); line-height: 1.12; letter-spacing: -.05em; }
+  .intro p { margin: 0; color: var(--muted); font-size: 15px; }
+  .status-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 38px;
+    padding: 7px 20px;
+    background: #eaf5f1;
+    color: var(--teal-dark);
+    font-size: 14px;
+    font-weight: 750;
+  }
+  .status-strip .dot { display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 50%; background: var(--gold); }
+  .status-strip.connected .dot { background: #23856f; }
+  main { padding: 18px 20px 24px; }
+  .gate {
+    padding: 24px 18px;
+    border: 2px dashed var(--line);
+    border-radius: 24px;
+    background: #f7fbf9;
+    text-align: center;
+  }
+  .gate .big { font-size: 52px; line-height: 1; margin-bottom: 12px; }
+  .gate h2 { margin: 0 0 8px; font-size: 24px; line-height: 1.2; }
+  .gate p { margin: 0 auto 18px; max-width: 31ch; color: var(--muted); }
+  .primary, .secondary {
+    min-height: 54px;
+    border-radius: 15px;
+    padding: 10px 18px;
+    font-size: 17px;
+    font-weight: 800;
+  }
+  .primary { color: #fff; background: var(--teal-dark); border: 2px solid var(--teal-dark); }
+  .primary:hover:not(:disabled) { background: #0d403e; }
+  .secondary { color: var(--ink); background: #fff; border: 2px solid var(--line); }
+  .waiting-note { margin: 12px 0 0 !important; font-size: 14px; }
+  .scoreboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    border: 2px solid var(--line);
+    border-radius: 20px;
+    background: #f5fbf8;
+    overflow: hidden;
+  }
+  .stat { padding: 10px 6px; text-align: center; }
+  .stat + .stat { border-left: 2px solid var(--line); }
+  .stat .label { display: block; color: var(--muted); font-size: 12px; font-weight: 750; }
+  .stat .value { display: block; font-size: 25px; font-weight: 850; font-variant-numeric: tabular-nums; line-height: 1.18; }
+  .stat .value.danger { color: var(--warning); }
+  .answer-panel { margin-top: 17px; text-align: center; }
+  .answer-panel h2 { margin: 0 0 9px; font-size: 17px; }
+  .answer-slots { display: flex; justify-content: center; gap: 5px; }
+  .answer-slot {
+    display: grid;
+    place-items: center;
+    flex: 1 1 0;
+    max-width: 52px;
+    min-width: 0;
+    height: 48px;
+    border: 2px solid var(--line);
+    border-bottom: 4px solid var(--teal);
+    border-radius: 11px 11px 7px 7px;
+    background: #f7fbf9;
+    font-size: clamp(22px, 6vw, 29px);
+    line-height: 1;
+    font-weight: 850;
+  }
+  .answer-slot.shown { background: var(--gold-light); border-color: var(--gold); }
+  .answer-slot.pop { animation: pop .5s ease both; }
+  .rules { margin: 11px 0 0; color: var(--muted); font-size: 13px; line-height: 1.4; }
+  .word-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 18px;
+  }
+  .word-group { border-top: 3px solid var(--teal); padding-top: 7px; min-width: 0; }
+  .word-group:nth-child(2) { border-color: var(--gold); }
+  .word-group h3 { margin: 0 0 7px; font-size: 15px; line-height: 1.2; }
+  .word-group ol { list-style: none; padding: 0; margin: 0; }
+  .word-group li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 32px;
+    gap: 4px;
+    border-bottom: 1px solid #e1eae5;
+    font-size: 14px;
+  }
+  .word-group li .pattern { font-weight: 800; letter-spacing: .12em; white-space: nowrap; }
+  .word-group li.solved .pattern { color: var(--teal-dark); letter-spacing: .04em; }
+  .word-group li .credit { color: var(--muted); font-size: 11px; text-align: right; }
+  .entry-area { margin-top: 13px; }
+  .preview {
+    min-height: 47px;
+    display: grid;
+    place-items: center;
+    padding: 4px 12px;
+    border-radius: 13px;
+    background: #eaf5f1;
+    color: var(--ink);
+    text-align: center;
+    font-size: 23px;
+    font-weight: 850;
+    letter-spacing: .14em;
+  }
+  .preview.empty { color: var(--muted); font-size: 14px; font-weight: 600; letter-spacing: 0; }
+  .wheel {
+    position: relative;
+    width: min(72vw, 280px);
+    aspect-ratio: 1;
+    margin: 8px auto 2px;
+    border-radius: 50%;
+    border: 3px solid #c9e0db;
+    background: radial-gradient(circle, #fafffc 0 34%, #e3f1ed 34% 100%);
+    touch-action: none;
+    user-select: none;
+  }
+  .wheel::before {
+    content: "";
+    position: absolute;
+    inset: 15%;
+    border: 2px dashed rgba(39, 111, 108, .22);
+    border-radius: 50%;
+  }
+  #trace { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  #trace polyline { fill: none; stroke: var(--gold); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
+  .letter {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--teal-dark);
+    border-radius: 50%;
+    color: #fff;
+    background: var(--teal);
+    box-shadow: 0 5px 0 var(--teal-dark);
+    font-size: 27px;
+    font-weight: 850;
+    line-height: 1;
+    z-index: 2;
+    transition: transform .12s ease, background .12s ease;
+  }
+  .letter.selected { background: #c9852f; border-color: #9b641e; box-shadow: 0 5px 0 #9b641e; transform: translate(-50%, -50%) scale(1.07); }
+  .letter:active { transform: translate(-50%, -50%) scale(.95); }
+  .shuffle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 80px;
+    height: 80px;
+    transform: translate(-50%, -50%);
+    border: 2px solid var(--line);
+    border-radius: 50%;
+    color: var(--teal-dark);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1.15;
+    z-index: 1;
+  }
+  .controls { display: grid; grid-template-columns: 1fr 1fr 1.5fr; gap: 8px; }
+  .controls button { min-height: 50px; border-radius: 12px; font-size: 15px; font-weight: 800; }
+  .hint-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .hint-row button { min-width: 130px; min-height: 48px; padding: 8px 12px; border: 2px solid var(--gold); border-radius: 12px; color: var(--ink); background: var(--gold-light); font-weight: 800; }
+  .hint-row span { color: var(--muted); font-size: 13px; line-height: 1.25; }
+  .message { min-height: 34px; margin-top: 12px; color: var(--teal-dark); text-align: center; font-size: 16px; font-weight: 800; }
+  .message.bad { color: var(--warning); }
+  .message.celebrate { animation: message-in .45s ease both; }
+  .end-panel { margin-top: 14px; padding: 18px; border: 2px solid var(--gold); border-radius: 20px; background: var(--gold-light); text-align: center; }
+  .end-panel h2 { margin: 0 0 4px; font-size: 24px; }
+  .end-panel p { margin: 0 0 12px; }
+  .end-panel button { width: 100%; }
+  .footer-note { margin: 14px 0 0; color: var(--muted); text-align: center; font-size: 12px; }
+  @keyframes pop { 0% { transform: translateY(12px) scale(.75); opacity: .2; } 70% { transform: translateY(-3px) scale(1.08); } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+  @keyframes message-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @media (max-width: 360px) {
+    .shell { padding: 0; }
+    .sheet { border-radius: 0; min-height: 100vh; border: 0; }
+    .topbar, .intro { padding-left: 15px; padding-right: 15px; }
+    .status-strip { padding-left: 15px; padding-right: 15px; }
+    main { padding: 15px; }
+    .letter { width: 54px; height: 54px; font-size: 25px; }
+    .shuffle { width: 72px; height: 72px; }
+    .answer-slot { height: 43px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="sheet">
+    <header class="topbar">
+      <div class="mark" aria-hidden="true">B</div>
+      <div class="brand"><strong>Brainy Friends</strong><span>A word game for two</span></div>
+      <button id="sound" class="sound" type="button" aria-pressed="true">Voice on</button>
+    </header>
+    <div class="intro">
+      <h1>Find words. Feel brilliant. Together.</h1>
+      <p>Help your teammate reveal the seven-letter word.</p>
+    </div>
+    <div id="connection" class="status-strip"><span><span class="dot"></span><span id="connection-text">Connecting to your teammate</span></span><span id="role"></span></div>
+    <main>
+      <section id="gate" class="gate">
+        <div class="big" aria-hidden="true">◌</div>
+        <h2 id="gate-title">Connecting</h2>
+        <p id="gate-copy">Getting your team room ready.</p>
+        <button id="start" class="primary hidden" type="button">Start team round</button>
+        <p id="wait-start" class="waiting-note hidden">Player 1 will start when both teammates are here.</p>
+      </section>
+      <div id="game" class="hidden">
+        <div class="scoreboard" aria-label="Team game status">
+          <div class="stat"><span class="label">Time left</span><span id="timer" class="value">3:00</span></div>
+          <div class="stat"><span class="label">Team points</span><span id="score" class="value">0</span></div>
+          <div class="stat"><span class="label">Hints left</span><span id="hints" class="value">2</span></div>
+        </div>
+        <section class="answer-panel" aria-label="Seven-letter answer">
+          <h2>The team word</h2>
+          <div id="answer-slots" class="answer-slots"></div>
+          <p class="rules">Each smaller word reveals a letter. A different smaller word costs 10 seconds. A wrong team word costs 20 seconds.</p>
+        </section>
+        <section class="word-board" aria-label="Six smaller words">
+          <div class="word-group"><h3>Player 1 words</h3><ol id="words-one"></ol></div>
+          <div class="word-group"><h3>Player 2 words</h3><ol id="words-two"></ol></div>
+        </section>
+        <div class="entry-area">
+          <div id="preview" class="preview empty" aria-live="polite">Tap or trace letters to make a word</div>
+          <div id="wheel" class="wheel" aria-label="Letter wheel">
+            <svg id="trace" viewBox="0 0 280 280" aria-hidden="true"><polyline id="trace-line" points=""></polyline></svg>
+            <button id="shuffle" class="shuffle" type="button" aria-label="Shuffle letters">Shuffle<br>letters</button>
+          </div>
+          <div class="controls">
+            <button id="undo" class="secondary" type="button">Undo</button>
+            <button id="clear" class="secondary" type="button">Clear</button>
+            <button id="submit" class="primary" type="button">Try word</button>
+          </div>
+          <div class="hint-row">
+            <button id="hint" type="button">Reveal a letter</button>
+            <span>Two hints for the team. Each costs 25 points.</span>
+          </div>
+          <div id="message" class="message" role="status" aria-live="polite"></div>
+        </div>
+        <section id="end" class="end-panel hidden" aria-live="polite">
+          <h2 id="end-title"></h2>
+          <p id="end-copy"></p>
+          <button id="again" class="primary hidden" type="button">Play this puzzle again</button>
+          <p id="again-wait" class="waiting-note hidden">Player 1 can restart the round.</p>
+        </section>
+        <p class="footer-note">Either teammate can find any smaller word. Your points and progress are shared.</p>
+      </div>
+    </main>
+  </div>
+</div>
+<script type="module">
+const APP = 'Brainy Friends';
+const SECRET = 'HARVEST';
+const LETTERS = [...SECRET];
+const TARGETS = [
+  { word: 'HEART', group: 1 },
+  { word: 'STAR', group: 1 },
+  { word: 'VASE', group: 1 },
+  { word: 'SHARE', group: 2 },
+  { word: 'HEAT', group: 2 },
+  { word: 'SAVE', group: 2 }
+];
+const REVEAL_ORDER = [2, 5, 0, 4, 1, 6, 3];
+const ROUND_SECONDS = 180;
+const PRAISE = [
+  'You are amazing!',
+  'You are a rockstar!',
+  'Brilliant thinking!',
+  'Wonderful teamwork!',
+  'You found another one!'
+];
+const el = id => document.getElementById(id);
+let net;
+let meta;
+let actions;
+let chosen = [];
+let order = LETTERS.map((_, index) => index);
+let pointerActive = false;
+let pointerMoved = false;
+let soundOn = true;
+let initialRender = true;
+let lastAnnounced = '';
+let previousRevealed = new Set();
+let messageTimer = 0;
+const wheel = el('wheel');
+const letterButtons = [];
+
+function uniqueId() {
+  return globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now();
+}
+function activeIds() {
+  if (!net) return [];
+  return [...new Set(net.players().map(player => player.id))].sort();
+}
+function roundData() {
+  return meta ? meta.get('round') : null;
+}
+function addAction(kind, word) {
+  const round = roundData();
+  if (!round || !round.players.includes(net.id)) return;
+  const id = uniqueId();
+  actions.set(round.id + '|' + net.id + '|' + id, {
+    id, round: round.id, by: net.id, kind, word: word || '', at: Date.now()
+  });
+}
+function sortedActions(round) {
+  if (!round || !actions) return [];
+  return [...actions.values()]
+    .filter(action => action && action.round === round.id && round.players.includes(action.by))
+    .sort((a, b) => a.at - b.at || String(a.id).localeCompare(String(b.id)));
+}
+function nextHidden(revealed) {
+  return REVEAL_ORDER.find(position => !revealed.has(position));
+}
+function derive(now = Date.now()) {
+  const round = roundData();
+  if (!round) return null;
+  const events = sortedActions(round);
+  const solved = new Map();
+  const revealed = new Set();
+  const outcomes = [];
+  let hintsUsed = 0;
+  let penalties = 0;
+  let won = false;
+  let winRemaining = 0;
+  for (const action of events) {
+    const at = Math.max(round.at, Number(action.at) || round.at);
+    const remainingBefore = Math.ceil((round.at + ROUND_SECONDS * 1000 - at) / 1000) - penalties;
+    if (won || remainingBefore <= 0) continue;
+    let result = 'ignored';
+    if (action.kind === 'hint') {
+      const position = nextHidden(revealed);
+      if (hintsUsed < 2 && position !== undefined) {
+        hintsUsed++;
+        revealed.add(position);
+        result = 'hint';
+      }
+    } else if (action.kind === 'short') {
+      const target = TARGETS.find(item => item.word === action.word);
+      if (target && !solved.has(action.word)) {
+        solved.set(action.word, action.by);
+        const position = nextHidden(revealed);
+        if (position !== undefined) revealed.add(position);
+        result = 'found';
+      } else if (target) {
+        result = 'repeat';
+      } else {
+        penalties += 10;
+        result = 'short-wrong';
+      }
+    } else if (action.kind === 'final') {
+      if (action.word === SECRET) {
+        won = true;
+        winRemaining = remainingBefore;
+        for (let index = 0; index < SECRET.length; index++) revealed.add(index);
+        result = 'win';
+      } else {
+        penalties += 20;
+        result = 'final-wrong';
+      }
+    }
+    outcomes.push({ action, result, foundCount: solved.size });
+  }
+  const remaining = won ? winRemaining : Math.max(0, Math.ceil((round.at + ROUND_SECONDS * 1000 - now) / 1000) - penalties);
+  const scoreBeforeHint = [...solved.keys()].reduce((sum, word) => sum + 10 * word.length, 0) + (won ? 100 + winRemaining : 0);
+  return {
+    round, events, outcomes, solved, revealed, hintsUsed, remaining,
+    score: Math.max(0, scoreBeforeHint - 25 * hintsUsed),
+    status: won ? 'won' : remaining <= 0 ? 'lost' : 'playing'
+  };
+}
+function showMessage(text, bad = false, celebrate = false) {
+  const node = el('message');
+  node.textContent = text;
+  node.className = 'message' + (bad ? ' bad' : '') + (celebrate ? ' celebrate' : '');
+  clearTimeout(messageTimer);
+  messageTimer = setTimeout(() => {
+    node.textContent = '';
+    node.className = 'message';
+  }, 4200);
+}
+function announceLatest(data) {
+  const latest = data.outcomes.at(-1);
+  if (!latest) return;
+  if (initialRender) {
+    lastAnnounced = latest.action.id;
+    return;
+  }
+  if (latest.action.id === lastAnnounced) return;
+  lastAnnounced = latest.action.id;
+  if (latest.result === 'found') showMessage(PRAISE[(latest.foundCount - 1) % PRAISE.length], false, true);
+  if (latest.result === 'win') showMessage('You did it together!', false, true);
+  if (latest.result === 'hint') showMessage('A new letter appeared. You can do this!');
+  if (latest.result === 'repeat') showMessage('You already found that word. Keep going!');
+  if (latest.result === 'short-wrong') showMessage('Not one of the six words. 10 seconds off.', true);
+  if (latest.result === 'final-wrong') showMessage('Try another team word. 20 seconds off.', true);
+}
+function drawTargets(data) {
+  for (const group of [1, 2]) {
+    const list = el(group === 1 ? 'words-one' : 'words-two');
+    list.replaceChildren();
+    for (const target of TARGETS.filter(item => item.group === group)) {
+      const row = document.createElement('li');
+      const pattern = document.createElement('span');
+      const credit = document.createElement('span');
+      const by = data.solved.get(target.word);
+      pattern.className = 'pattern';
+      credit.className = 'credit';
+      if (by) {
+        row.className = 'solved';
+        pattern.textContent = target.word;
+        credit.textContent = by === data.round.players[0] ? 'by Player 1' : 'by Player 2';
+      } else {
+        pattern.textContent = '□ '.repeat(target.word.length).trim();
+        credit.textContent = target.word.length + ' letters';
+      }
+      row.append(pattern, credit);
+      list.append(row);
+    }
+  }
+}
+function drawAnswer(data) {
+  const slots = el('answer-slots');
+  if (slots.children.length !== SECRET.length) {
+    slots.replaceChildren();
+    for (let index = 0; index < SECRET.length; index++) {
+      const slot = document.createElement('div');
+      slot.className = 'answer-slot';
+      slots.append(slot);
+    }
+  }
+  for (let index = 0; index < SECRET.length; index++) {
+    const slot = slots.children[index];
+    slot.classList.toggle('shown', data.revealed.has(index));
+    slot.textContent = data.revealed.has(index) ? SECRET[index] : '';
+    slot.setAttribute('aria-label', data.revealed.has(index) ? 'Letter ' + (index + 1) + ': ' + SECRET[index] : 'Letter ' + (index + 1) + ' hidden');
+    if (!previousRevealed.has(index) && data.revealed.has(index) && !initialRender) {
+      slot.classList.add('pop');
+      slot.addEventListener('animationend', () => slot.classList.remove('pop'), { once: true });
+    }
+  }
+  previousRevealed = new Set(data.revealed);
+}
+function timeText(seconds) {
+  return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+}
+function render() {
+  if (!net) return;
+  const ids = activeIds();
+  const round = roundData();
+  const connected = ids.length >= 2;
+  el('connection').classList.toggle('connected', connected);
+  el('connection-text').textContent = connected ? 'Both teammates connected' : 'Waiting for teammate';
+  const roleIndex = round ? round.players.indexOf(net.id) : ids.indexOf(net.id);
+  el('role').textContent = roleIndex >= 0 && roleIndex < 2 ? 'You: Player ' + (roleIndex + 1) : 'Spectating';
+  if (!round) {
+    el('gate').classList.remove('hidden');
+    el('game').classList.add('hidden');
+    el('gate-title').textContent = connected ? 'Your team is ready' : 'Invite your teammate';
+    el('gate-copy').textContent = connected ? 'Both players are here. Start the three-minute word challenge.' : 'Open this same page on a second phone or browser tab.';
+    const mayStart = connected && ids[0] === net.id;
+    el('start').classList.toggle('hidden', !mayStart);
+    el('wait-start').classList.toggle('hidden', !connected || mayStart);
+    initialRender = false;
+    return;
+  }
+  el('gate').classList.add('hidden');
+  el('game').classList.remove('hidden');
+  const data = derive();
+  if (!data) return;
+  const canPlay = round.players.includes(net.id) && data.status === 'playing';
+  el('timer').textContent = timeText(data.remaining);
+  el('timer').classList.toggle('danger', data.remaining <= 30);
+  el('score').textContent = data.score;
+  el('hints').textContent = Math.max(0, 2 - data.hintsUsed);
+  drawAnswer(data);
+  drawTargets(data);
+  announceLatest(data);
+  for (const id of ['submit', 'undo', 'clear', 'shuffle']) el(id).disabled = !canPlay;
+  el('hint').disabled = !canPlay || data.hintsUsed >= 2 || data.revealed.size >= SECRET.length;
+  for (const button of letterButtons) button.disabled = !canPlay;
+  const ended = data.status !== 'playing';
+  el('end').classList.toggle('hidden', !ended);
+  if (ended) {
+    el('end-title').textContent = data.status === 'won' ? 'You did it together!' : 'Time is up';
+    el('end-copy').textContent = data.status === 'won'
+      ? 'The word was ' + SECRET + '. Team score: ' + data.score + '.'
+      : 'The team word was ' + SECRET + '. Try the puzzle again together.';
+    const mayRestart = connected && ids[0] === net.id;
+    el('again').classList.toggle('hidden', !mayRestart);
+    el('again-wait').classList.toggle('hidden', mayRestart);
+  }
+  initialRender = false;
+}
+function speakLetter(letter) {
+  if (!soundOn || !('speechSynthesis' in window)) return;
+  try {
+    speechSynthesis.cancel();
+    const voiceLine = new SpeechSynthesisUtterance(letter);
+    voiceLine.lang = 'en-US';
+    voiceLine.rate = 0.82;
+    voiceLine.volume = 1;
+    speechSynthesis.speak(voiceLine);
+  } catch {}
+}
+function selectedWord() {
+  return chosen.map(index => LETTERS[index]).join('');
+}
+function drawSelection() {
+  const preview = el('preview');
+  const word = selectedWord();
+  preview.textContent = word || 'Tap or trace letters to make a word';
+  preview.classList.toggle('empty', !word);
+  for (let index = 0; index < letterButtons.length; index++) letterButtons[index].classList.toggle('selected', chosen.includes(index));
+  const bounds = wheel.getBoundingClientRect();
+  const points = chosen.map(index => {
+    const box = letterButtons[index].getBoundingClientRect();
+    const x = (box.left + box.width / 2 - bounds.left) * 280 / bounds.width;
+    const y = (box.top + box.height / 2 - bounds.top) * 280 / bounds.height;
+    return x.toFixed(1) + ',' + y.toFixed(1);
+  });
+  el('trace-line').setAttribute('points', points.join(' '));
+}
+function chooseLetter(index) {
+  if (!net || !derive() || derive().status !== 'playing') return;
+  if (!roundData().players.includes(net.id) || chosen.includes(index)) return;
+  chosen.push(index);
+  speakLetter(LETTERS[index]);
+  drawSelection();
+}
+function clearSelection() {
+  chosen = [];
+  drawSelection();
+}
+function submitWord() {
+  const data = derive();
+  if (!data || data.status !== 'playing' || !data.round.players.includes(net.id)) return;
+  const word = selectedWord();
+  if (word.length < 3) {
+    showMessage('Choose at least three letters.');
+    return;
+  }
+  addAction(word.length === 7 ? 'final' : 'short', word);
+  clearSelection();
+}
+function positionLetters() {
+  for (let slot = 0; slot < order.length; slot++) {
+    const index = order[slot];
+    const angle = -Math.PI / 2 + slot * Math.PI * 2 / order.length;
+    letterButtons[index].style.left = (50 + 38 * Math.cos(angle)) + '%';
+    letterButtons[index].style.top = (50 + 38 * Math.sin(angle)) + '%';
+  }
+  requestAnimationFrame(drawSelection);
+}
+function buildWheel() {
+  LETTERS.forEach((letter, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'letter';
+    button.textContent = letter;
+    button.dataset.index = String(index);
+    button.setAttribute('aria-label', 'Letter ' + letter);
+    wheel.append(button);
+    letterButtons.push(button);
+  });
+  positionLetters();
+}
+function beginRound() {
+  const ids = activeIds();
+  const current = derive();
+  if (ids.length < 2 || ids[0] !== net.id || current && current.status === 'playing') return;
+  lastAnnounced = '';
+  previousRevealed = new Set();
+  clearSelection();
+  meta.set('round', { id: uniqueId(), at: Date.now(), players: ids.slice(0, 2) });
+}
+el('sound').addEventListener('click', () => {
+  soundOn = !soundOn;
+  if (!soundOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+  el('sound').textContent = soundOn ? 'Voice on' : 'Voice off';
+  el('sound').setAttribute('aria-pressed', String(soundOn));
+});
+el('start').addEventListener('click', beginRound);
+el('again').addEventListener('click', beginRound);
+el('submit').addEventListener('click', submitWord);
+el('clear').addEventListener('click', clearSelection);
+el('undo').addEventListener('click', () => { chosen.pop(); drawSelection(); });
+el('hint').addEventListener('click', () => {
+  const data = derive();
+  if (data && data.status === 'playing' && data.hintsUsed < 2 && data.revealed.size < SECRET.length) addAction('hint');
+});
+el('shuffle').addEventListener('click', () => {
+  for (let index = order.length - 1; index > 0; index--) {
+    const other = Math.floor(Math.random() * (index + 1));
+    [order[index], order[other]] = [order[other], order[index]];
+  }
+  positionLetters();
+});
+wheel.addEventListener('pointerdown', event => {
+  const tile = event.target.closest('.letter');
+  if (!tile || tile.disabled) return;
+  pointerActive = true;
+  pointerMoved = false;
+  chooseLetter(Number(tile.dataset.index));
+  wheel.setPointerCapture(event.pointerId);
+});
+wheel.addEventListener('pointermove', event => {
+  if (!pointerActive) return;
+  const tile = document.elementFromPoint(event.clientX, event.clientY)?.closest('.letter');
+  if (!tile || tile.disabled) return;
+  const index = Number(tile.dataset.index);
+  if (!chosen.includes(index)) {
+    pointerMoved = true;
+    chooseLetter(index);
+  }
+});
+wheel.addEventListener('pointerup', () => {
+  if (!pointerActive) return;
+  pointerActive = false;
+  if (pointerMoved && chosen.length >= 3) submitWord();
+});
+wheel.addEventListener('pointercancel', () => { pointerActive = false; });
+window.addEventListener('keydown', event => {
+  if (event.key === 'Backspace') { chosen.pop(); drawSelection(); event.preventDefault(); }
+  if (event.key === 'Escape') clearSelection();
+  if (event.key === 'Enter' && chosen.length) { submitWord(); event.preventDefault(); }
+  const index = LETTERS.findIndex((letter, position) => letter === event.key.toUpperCase() && !chosen.includes(position));
+  if (index >= 0 && event.key.length === 1) chooseLetter(index);
+});
+window.addEventListener('resize', drawSelection);
+buildWheel();
+if (!('speechSynthesis' in window)) {
+  soundOn = false;
+  el('sound').textContent = 'Voice unavailable';
+  el('sound').disabled = true;
+}
+try {
+  const library = await import('https://cdn.jsdelivr.net/gh/ccmpm/session-8@main/lib/sync.js');
+  net = await library.connect({ app: APP });
+  meta = net.shared('brainy-friends-meta');
+  actions = net.shared('brainy-friends-actions');
+  net.setState({ present: true });
+  net.onJoin(() => setTimeout(render, 200));
+  net.onLeave(render);
+  net.onChange(render);
+  setInterval(render, 250);
+  render();
+} catch (error) {
+  el('gate-title').textContent = 'Could not connect';
+  el('gate-copy').textContent = 'Check your internet connection, then reload this page. The team game needs the meetup connection library.';
+  el('connection-text').textContent = 'Connection unavailable';
+  console.error('Brainy Friends connection failed', error);
+}
+</script>
+</body>
+</html>
