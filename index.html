@@ -841,6 +841,7 @@ if (teamUrl.searchParams.has('left')) {
   try {
     const library = await import('https://cdn.jsdelivr.net/gh/ccmpm/session-8@main/lib/sync.js');
     net = await library.connect({ app: APP });
+    window.net = net;
     meta = net.shared('brainy-friends-meta');
     actions = net.shared('brainy-friends-actions');
     lobby = net.shared('brainy-friends-lobby');
