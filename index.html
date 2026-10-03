@@ -818,6 +818,11 @@ if (!('speechSynthesis' in window)) {
   el('sound').textContent = 'Voice unavailable';
   el('sound').disabled = true;
 }
+const teamUrl = new URL(location.href);
+if (!teamUrl.searchParams.get('room')) {
+  teamUrl.searchParams.set('room', uniqueId().slice(0, 12));
+  try { history.replaceState(null, '', teamUrl.href); } catch {}
+}
 try {
   const library = await import('https://cdn.jsdelivr.net/gh/ccmpm/session-8@main/lib/sync.js');
   net = await library.connect({ app: APP });
