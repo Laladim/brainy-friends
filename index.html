@@ -61,6 +61,7 @@
     border-radius: 999px; color: #fff; background: rgba(95, 18, 59, .15);
     font-size: 12px; font-weight: 850; white-space: nowrap;
   }
+  .music[aria-pressed="false"] { background: rgba(95, 18, 59, .45); opacity: .8; }
   .exit { min-width: 48px; }
   .intro { padding: 1px 17px 12px; }
   .intro h1 { margin: 0 0 2px; font-family: ui-rounded, "Arial Rounded MT Bold", system-ui, sans-serif; font-size: clamp(23px, 5.6vw, 30px); font-weight: 900; line-height: 1.1; letter-spacing: -.045em; }
@@ -155,10 +156,11 @@
   @media (max-width: 360px) {
     .shell { padding: 0; }
     .sheet { border: 0; border-radius: 0; }
-    .topbar { padding: 6px 10px; }
+    .topbar { gap: 6px; padding: 6px 8px; }
+    .mark, .music-state { display: none; }
     .intro { padding: 1px 12px 10px; }
     .brand strong { font-size: 17px; }
-    .sound, .exit { padding: 5px 7px; }
+    .sound, .exit { padding: 5px 6px; }
     main { padding: 7px 9px 9px; }
   }
   @media (max-height: 650px) {
@@ -183,6 +185,7 @@
         <div class="mark" aria-hidden="true">B</div>
         <div class="brand"><strong>Brainy Friends</strong><span>A word game for two</span></div>
         <div class="header-actions">
+          <button id="music" class="sound music" type="button" aria-label="Turn music off" aria-pressed="true">Music <span id="music-state" class="music-state">on</span></button>
           <button id="sound" class="sound" type="button" aria-pressed="true">Voice on</button>
           <button id="exit" class="exit" type="button" aria-label="Exit game">Exit</button>
         </div>
@@ -344,6 +347,14 @@ let order = LETTERS.map((_, index) => index);
 let pointerActive = false;
 let pointerMoved = false;
 let soundOn = true;
+let musicOn = true;
+try { musicOn = localStorage.getItem('brainy-music') !== 'off'; } catch {}
+let musicContext = null;
+let musicMaster = null;
+let musicTimer = null;
+let musicStep = 0;
+let musicNextTime = 0;
+let musicSceneActive = false;
 let initialRender = true;
 let lastAnnounced = '';
 let previousRevealed = new Set();
@@ -558,15 +569,96 @@ function burstConfetti(extra = false) {
     setTimeout(() => piece.remove(), 1700);
   }
 }
+const MUSIC_CHORDS = [
+  [261.63, 329.63, 392], [220, 261.63, 329.63],
+  [174.61, 220, 261.63], [196, 246.94, 293.66]
+];
+const MUSIC_MELODY = [523.25, 0, 659.25, 0, 440, 0, 523.25, 0, 440, 0, 523.25, 0, 493.88, 0, 587.33, 0];
+function updateMusicButton() {
+  el('music').setAttribute('aria-pressed', String(musicOn));
+  el('music').setAttribute('aria-label', musicOn ? 'Turn music off' : 'Turn music on');
+  el('music-state').textContent = musicOn ? 'on' : 'off';
+}
+function setMusicVolume() {
+  if (!musicContext || !musicMaster) return;
+  const level = musicTimer ? currentVoice ? .07 : .42 : 0;
+  musicMaster.gain.setTargetAtTime(level, musicContext.currentTime, .08);
+}
+function playMusicTone(frequency, at, length, volume, type = 'sine') {
+  const oscillator = musicContext.createOscillator();
+  const envelope = musicContext.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, at);
+  envelope.gain.setValueAtTime(.0001, at);
+  envelope.gain.exponentialRampToValueAtTime(volume, at + .06);
+  envelope.gain.exponentialRampToValueAtTime(.0001, at + length);
+  oscillator.connect(envelope).connect(musicMaster);
+  oscillator.start(at);
+  oscillator.stop(at + length + .02);
+  oscillator.addEventListener('ended', () => { oscillator.disconnect(); envelope.disconnect(); }, { once: true });
+}
+function scheduleMusic() {
+  if (!musicTimer || !musicSceneActive || !musicOn || document.hidden) return;
+  if (musicNextTime < musicContext.currentTime - .1) musicNextTime = musicContext.currentTime + .05;
+  while (musicNextTime < musicContext.currentTime + .35) {
+    const beat = musicStep % 16;
+    if (beat % 4 === 0) {
+      for (const note of MUSIC_CHORDS[Math.floor(beat / 4)]) playMusicTone(note, musicNextTime, 2.65, .012);
+    }
+    if (MUSIC_MELODY[beat]) playMusicTone(MUSIC_MELODY[beat], musicNextTime, 1.25, .029, 'triangle');
+    musicStep++;
+    musicNextTime += .72;
+  }
+}
+function stopMusic() {
+  if (musicTimer !== null) clearInterval(musicTimer);
+  musicTimer = null;
+  el('music').dataset.playing = 'false';
+  setMusicVolume();
+}
+function syncMusic(active) {
+  musicSceneActive = active;
+  if (!active || !musicOn || !musicContext || musicContext.state !== 'running' || document.hidden) {
+    stopMusic();
+    return;
+  }
+  if (musicTimer !== null) return;
+  musicStep = 0;
+  musicNextTime = musicContext.currentTime + .05;
+  musicTimer = setInterval(scheduleMusic, 120);
+  el('music').dataset.playing = 'true';
+  setMusicVolume();
+  scheduleMusic();
+}
+function wakeMusic() {
+  if (!musicOn) return;
+  try {
+    if (!musicContext) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      musicContext = new AudioContextClass();
+      musicMaster = musicContext.createGain();
+      musicMaster.gain.value = 0;
+      musicMaster.connect(musicContext.destination);
+    }
+    musicContext.resume().then(() => syncMusic(musicSceneActive)).catch(() => {});
+  } catch (error) {
+    console.warn('Music could not start', error);
+  }
+}
+updateMusicButton();
+el('music').dataset.playing = 'false';
 function drainVoiceQueue() {
   if (!soundOn || currentVoice || !voiceQueue.length) return;
   const key = voiceQueue.shift();
   const clip = new Audio(VOICE_AUDIO[key]);
   clip.preload = 'auto';
   currentVoice = clip;
+  setMusicVolume();
   const finish = () => {
     if (currentVoice === clip) currentVoice = null;
     drainVoiceQueue();
+    setMusicVolume();
   };
   clip.addEventListener('ended', finish, { once: true });
   clip.addEventListener('error', finish, { once: true });
@@ -679,6 +771,7 @@ function render() {
     ? next.request.by === net.id ? 'You: Host' : 'You: Teammate'
     : roleIndex >= 0 && roleIndex < 2 ? 'You: Player ' + (roleIndex + 1) : round ? 'Spectating' : '';
   if (waiting) {
+    syncMusic(!!next.request);
     el('sheet').className = 'sheet lobby';
     el('gate').classList.remove('hidden');
     el('game').classList.add('hidden');
@@ -700,6 +793,7 @@ function render() {
   el('game').classList.remove('hidden');
   const current = derive();
   if (!current) return;
+  syncMusic(current.status === 'playing');
   const canPlay = round.players.includes(net.id) && current.status === 'playing';
   el('sheet').className = current.status === 'playing' ? 'sheet playing' : 'sheet ended';
   el('timer').textContent = timeText(current.remaining);
@@ -790,17 +884,30 @@ function buildWheel() {
   });
   positionLetters();
 }
+el('music').addEventListener('click', () => {
+  musicOn = !musicOn;
+  try { localStorage.setItem('brainy-music', musicOn ? 'on' : 'off'); } catch {}
+  updateMusicButton();
+  if (musicOn) wakeMusic();
+  else stopMusic();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) stopMusic();
+  else if (musicContext) wakeMusic();
+});
 el('sound').addEventListener('click', () => {
   soundOn = !soundOn;
   if (!soundOn) {
     voiceQueue = [];
     if (currentVoice) currentVoice.pause();
     currentVoice = null;
+    setMusicVolume();
   }
   el('sound').textContent = soundOn ? 'Voice on' : 'Voice off';
   el('sound').setAttribute('aria-pressed', String(soundOn));
 });
 el('exit').addEventListener('click', () => {
+  stopMusic();
   try { sessionStorage.setItem('brainy-last-room', location.href); } catch {}
   const exitUrl = new URL(location.href);
   exitUrl.search = '?left=1';
@@ -816,9 +923,9 @@ el('fresh').addEventListener('click', () => {
   freshUrl.search = '?room=' + uniqueId().slice(0, 12);
   location.assign(freshUrl.href);
 });
-el('start').addEventListener('click', requestRound);
-el('join').addEventListener('click', joinRound);
-el('again').addEventListener('click', requestRound);
+el('start').addEventListener('click', () => { wakeMusic(); requestRound(); });
+el('join').addEventListener('click', () => { wakeMusic(); joinRound(); });
+el('again').addEventListener('click', () => { wakeMusic(); requestRound(); });
 el('copy-link').addEventListener('click', async () => {
   try {
     await navigator.clipboard.writeText(location.href);
