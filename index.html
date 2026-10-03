@@ -282,8 +282,8 @@
       <button id="sound" class="sound" type="button" aria-pressed="true">Voice on</button>
     </header>
     <div class="intro">
-      <h1>Find words. Feel brilliant. Together.</h1>
-      <p>Help your teammate reveal the seven-letter word.</p>
+      <h1>Too brilliant to play alone.</h1>
+      <p>Two friends. Seven letters. Three minutes to beat the clock.</p>
     </div>
     <div id="connection" class="status-strip"><span><span class="dot"></span><span id="connection-text">Connecting to your teammate</span></span><span id="role"></span></div>
     <main>
@@ -571,7 +571,7 @@ function render() {
   const ended = data.status !== 'playing';
   el('end').classList.toggle('hidden', !ended);
   if (ended) {
-    el('end-title').textContent = data.status === 'won' ? 'You did it together!' : 'Time is up';
+    el('end-title').textContent = data.status === 'won' ? 'Brilliant together. Friends forever.' : 'Time is up';
     el('end-copy').textContent = data.status === 'won'
       ? 'The word was ' + SECRET + '. Team score: ' + data.score + '.'
       : 'The team word was ' + SECRET + '. Try the puzzle again together.';
