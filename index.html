@@ -259,6 +259,11 @@
   .footer-note { margin: 14px 0 0; color: var(--muted); text-align: center; font-size: 12px; }
   @keyframes pop { 0% { transform: translateY(12px) scale(.75); opacity: .2; } 70% { transform: translateY(-3px) scale(1.08); } 100% { transform: translateY(0) scale(1); opacity: 1; } }
   @keyframes message-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @media (max-width: 420px) {
+    .word-group h3 { font-size: 16px; }
+    .word-group li { min-height: 36px; font-size: 17px; }
+    .word-group li .credit { display: none; }
+  }
   @media (max-width: 360px) {
     .shell { padding: 0; }
     .sheet { border-radius: 0; min-height: 100vh; border: 0; }
@@ -386,6 +391,7 @@ let pointerMoved = false;
 let soundOn = true;
 let initialRender = true;
 let lastAnnounced = '';
+let lastShownResult = '';
 let previousRevealed = new Set();
 let messageTimer = 0;
 const wheel = el('wheel');
@@ -413,6 +419,7 @@ function activatePuzzle(round) {
   previousRevealed = new Set();
   lastAnnounced = '';
   buildWheel();
+  requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'auto' }));
 }
 function lobbyState(round, ids) {
   const base = round ? round.id : 'first';
@@ -660,6 +667,10 @@ function render() {
       ? 'The word was ' + SECRET + '. Team score: ' + current.score + '.'
       : 'The team word was ' + SECRET + '. Try the puzzle again together.';
     el('again').classList.remove('hidden');
+    if (lastShownResult !== round.id) {
+      lastShownResult = round.id;
+      requestAnimationFrame(() => el('end').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' }));
+    }
   }
   initialRender = false;
 }
