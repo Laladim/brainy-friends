@@ -107,6 +107,7 @@
   .gate .big { font-size: 52px; line-height: 1; margin-bottom: 12px; }
   .gate h2 { margin: 0 0 8px; font-size: 24px; line-height: 1.2; }
   .gate p { margin: 0 auto 18px; max-width: 31ch; color: var(--muted); }
+  .gate button { display: block; width: 100%; margin-top: 10px; }
   .primary, .secondary {
     min-height: 54px;
     border-radius: 15px;
@@ -291,8 +292,10 @@
         <div class="big" aria-hidden="true">◌</div>
         <h2 id="gate-title">Connecting</h2>
         <p id="gate-copy">Getting your team room ready.</p>
-        <button id="start" class="primary hidden" type="button">Start team round</button>
-        <p id="wait-start" class="waiting-note hidden">Player 1 will start when both teammates are here.</p>
+        <button id="start" class="primary hidden" type="button">Start a round</button>
+        <button id="join" class="primary hidden" type="button">Join the round</button>
+        <button id="copy-link" class="secondary hidden" type="button">Copy invite link</button>
+        <p id="gate-status" class="waiting-note" role="status" aria-live="polite"></p>
       </section>
       <div id="game" class="hidden">
         <div class="scoreboard" aria-label="Team game status">
@@ -329,8 +332,7 @@
         <section id="end" class="end-panel hidden" aria-live="polite">
           <h2 id="end-title"></h2>
           <p id="end-copy"></p>
-          <button id="again" class="primary hidden" type="button">Play this puzzle again</button>
-          <p id="again-wait" class="waiting-note hidden">Player 1 can restart the round.</p>
+          <button id="again" class="primary hidden" type="button">Start another round</button>
         </section>
         <p class="footer-note">Either teammate can find any smaller word. Your points and progress are shared.</p>
       </div>
@@ -339,16 +341,27 @@
 </div>
 <script type="module">
 const APP = 'Brainy Friends';
-const SECRET = 'HARVEST';
-const LETTERS = [...SECRET];
-const TARGETS = [
-  { word: 'HEART', group: 1 },
-  { word: 'STAR', group: 1 },
-  { word: 'VASE', group: 1 },
-  { word: 'SHARE', group: 2 },
-  { word: 'HEAT', group: 2 },
-  { word: 'SAVE', group: 2 }
+const PUZZLES = [
+  { secret: 'HARVEST', targets: [
+    { word: 'HEART', group: 1 }, { word: 'STAR', group: 1 }, { word: 'VASE', group: 1 },
+    { word: 'SHARE', group: 2 }, { word: 'HEAT', group: 2 }, { word: 'SAVE', group: 2 }
+  ] },
+  { secret: 'PLANTED', targets: [
+    { word: 'PLANT', group: 1 }, { word: 'LAND', group: 1 }, { word: 'TEND', group: 1 },
+    { word: 'PLAN', group: 2 }, { word: 'LEAD', group: 2 }, { word: 'PLEA', group: 2 }
+  ] },
+  { secret: 'ORANGES', targets: [
+    { word: 'ORANGE', group: 1 }, { word: 'GEAR', group: 1 }, { word: 'ROSE', group: 1 },
+    { word: 'RANGE', group: 2 }, { word: 'EARN', group: 2 }, { word: 'RAGE', group: 2 }
+  ] },
+  { secret: 'FLOWERS', targets: [
+    { word: 'FLOWER', group: 1 }, { word: 'SLOW', group: 1 }, { word: 'ROSE', group: 1 },
+    { word: 'LOWER', group: 2 }, { word: 'WORE', group: 2 }, { word: 'SOLE', group: 2 }
+  ] }
 ];
+let SECRET = PUZZLES[0].secret;
+let LETTERS = [...SECRET];
+let TARGETS = PUZZLES[0].targets;
 const REVEAL_ORDER = [2, 5, 0, 4, 1, 6, 3];
 const ROUND_SECONDS = 180;
 const PRAISE = [
@@ -362,6 +375,10 @@ const el = id => document.getElementById(id);
 let net;
 let meta;
 let actions;
+let lobby;
+let currentPuzzle = -1;
+let startingBase = '';
+let gateNotice = '';
 let chosen = [];
 let order = LETTERS.map((_, index) => index);
 let pointerActive = false;
@@ -383,6 +400,60 @@ function activeIds() {
 }
 function roundData() {
   return meta ? meta.get('round') : null;
+}
+function activatePuzzle(round) {
+  const index = Number.isInteger(round.puzzle) && round.puzzle >= 0 && round.puzzle < PUZZLES.length ? round.puzzle : 0;
+  if (currentPuzzle === index) return;
+  currentPuzzle = index;
+  SECRET = PUZZLES[index].secret;
+  LETTERS = [...SECRET];
+  TARGETS = PUZZLES[index].targets;
+  chosen = [];
+  order = LETTERS.map((_, position) => position);
+  previousRevealed = new Set();
+  lastAnnounced = '';
+  buildWheel();
+}
+function lobbyState(round, ids) {
+  const base = round ? round.id : 'first';
+  if (!lobby) return { base, request: null, join: null };
+  const entries = [...lobby.values()].filter(entry => entry && entry.base === base && ids.includes(entry.by));
+  const requests = entries.filter(entry => entry.kind === 'request')
+    .sort((a, b) => a.at - b.at || String(a.id).localeCompare(String(b.id)));
+  const request = requests[0] || null;
+  const join = request ? entries.filter(entry => entry.kind === 'join' && entry.request === request.id && entry.by !== request.by)
+    .sort((a, b) => a.at - b.at || String(a.id).localeCompare(String(b.id)))[0] || null : null;
+  return { base, request, join };
+}
+function requestRound() {
+  const round = roundData();
+  if (round && derive().status === 'playing') return;
+  if (lobbyState(round, activeIds()).request) return;
+  gateNotice = '';
+  const id = uniqueId();
+  lobby.set('request|' + (round ? round.id : 'first') + '|' + net.id + '|' + id, {
+    id, base: round ? round.id : 'first', by: net.id, kind: 'request', at: Date.now()
+  });
+}
+function joinRound() {
+  const round = roundData();
+  const state = lobbyState(round, activeIds());
+  if (!state.request || state.request.by === net.id || state.join) return;
+  gateNotice = '';
+  const id = uniqueId();
+  lobby.set('join|' + state.base + '|' + net.id + '|' + id, {
+    id, base: state.base, by: net.id, kind: 'join', request: state.request.id, at: Date.now()
+  });
+}
+function launchReadyRound(round, state) {
+  if (!state.request || !state.join || state.request.by !== net.id || startingBase === state.base) return false;
+  startingBase = state.base;
+  gateNotice = '';
+  const nextPuzzle = round ? ((round.puzzle || 0) + 1) % PUZZLES.length : 0;
+  meta.set('round', {
+    id: uniqueId(), at: Date.now(), players: [state.request.by, state.join.by], puzzle: nextPuzzle
+  });
+  return true;
 }
 function addAction(kind, word) {
   const round = roundData();
@@ -537,47 +608,58 @@ function render() {
   if (!net) return;
   const ids = activeIds();
   const round = roundData();
+  if (round) activatePuzzle(round);
   const connected = ids.length >= 2;
   el('connection').classList.toggle('connected', connected);
   el('connection-text').textContent = connected ? 'Both teammates connected' : 'Waiting for teammate';
-  const roleIndex = round ? round.players.indexOf(net.id) : ids.indexOf(net.id);
-  el('role').textContent = roleIndex >= 0 && roleIndex < 2 ? 'You: Player ' + (roleIndex + 1) : 'Spectating';
-  if (!round) {
+  const data = round ? derive() : null;
+  const next = lobbyState(round, ids);
+  if ((!round || data.status !== 'playing') && launchReadyRound(round, next)) return;
+  const waiting = !round || (data.status !== 'playing' && !!next.request);
+  const roleIndex = round ? round.players.indexOf(net.id) : -1;
+  el('role').textContent = next.request && waiting
+    ? next.request.by === net.id ? 'You: Host' : 'You: Teammate'
+    : roleIndex >= 0 && roleIndex < 2 ? 'You: Player ' + (roleIndex + 1) : round ? 'Spectating' : '';
+  if (waiting) {
     el('gate').classList.remove('hidden');
     el('game').classList.add('hidden');
-    el('gate-title').textContent = connected ? 'Your team is ready' : 'Invite your teammate';
-    el('gate-copy').textContent = connected ? 'Both players are here. Start the three-minute word challenge.' : 'Open this same page on a second phone or browser tab.';
-    const mayStart = connected && ids[0] === net.id;
-    el('start').classList.toggle('hidden', !mayStart);
-    el('wait-start').classList.toggle('hidden', !connected || mayStart);
+    const hosting = next.request && next.request.by === net.id;
+    el('gate-title').textContent = next.request ? hosting ? 'Waiting for your teammate' : 'Your friend is waiting' : 'Ready for a brainy challenge?';
+    el('gate-copy').textContent = next.request
+      ? hosting ? 'Send this page link to your teammate. The next round starts when they tap Join the round.' : 'Join your friend for a fresh three-minute word puzzle.'
+      : 'Start a round, then invite a friend with this page link.';
+    el('start').classList.toggle('hidden', !!next.request);
+    el('join').classList.toggle('hidden', !next.request || hosting);
+    el('copy-link').classList.toggle('hidden', !!next.request && !hosting);
+    el('gate-status').textContent = gateNotice || (hosting
+      ? connected ? 'Your teammate is here. Waiting for them to join.' : 'Waiting for your teammate to open the link.'
+      : '');
     initialRender = false;
     return;
   }
   el('gate').classList.add('hidden');
   el('game').classList.remove('hidden');
-  const data = derive();
-  if (!data) return;
-  const canPlay = round.players.includes(net.id) && data.status === 'playing';
-  el('timer').textContent = timeText(data.remaining);
-  el('timer').classList.toggle('danger', data.remaining <= 30);
-  el('score').textContent = data.score;
-  el('hints').textContent = Math.max(0, 2 - data.hintsUsed);
-  drawAnswer(data);
-  drawTargets(data);
-  announceLatest(data);
+  const current = derive();
+  if (!current) return;
+  const canPlay = round.players.includes(net.id) && current.status === 'playing';
+  el('timer').textContent = timeText(current.remaining);
+  el('timer').classList.toggle('danger', current.remaining <= 30);
+  el('score').textContent = current.score;
+  el('hints').textContent = Math.max(0, 2 - current.hintsUsed);
+  drawAnswer(current);
+  drawTargets(current);
+  announceLatest(current);
   for (const id of ['submit', 'undo', 'clear', 'shuffle']) el(id).disabled = !canPlay;
-  el('hint').disabled = !canPlay || data.hintsUsed >= 2 || data.revealed.size >= SECRET.length;
+  el('hint').disabled = !canPlay || current.hintsUsed >= 2 || current.revealed.size >= SECRET.length;
   for (const button of letterButtons) button.disabled = !canPlay;
-  const ended = data.status !== 'playing';
+  const ended = current.status !== 'playing';
   el('end').classList.toggle('hidden', !ended);
   if (ended) {
-    el('end-title').textContent = data.status === 'won' ? 'Brilliant together. Friends forever.' : 'Time is up';
-    el('end-copy').textContent = data.status === 'won'
-      ? 'The word was ' + SECRET + '. Team score: ' + data.score + '.'
+    el('end-title').textContent = current.status === 'won' ? 'Brilliant together. Friends forever.' : 'Time is up';
+    el('end-copy').textContent = current.status === 'won'
+      ? 'The word was ' + SECRET + '. Team score: ' + current.score + '.'
       : 'The team word was ' + SECRET + '. Try the puzzle again together.';
-    const mayRestart = connected && ids[0] === net.id;
-    el('again').classList.toggle('hidden', !mayRestart);
-    el('again-wait').classList.toggle('hidden', mayRestart);
+    el('again').classList.remove('hidden');
   }
   initialRender = false;
 }
@@ -642,6 +724,8 @@ function positionLetters() {
   requestAnimationFrame(drawSelection);
 }
 function buildWheel() {
+  for (const button of letterButtons) button.remove();
+  letterButtons.length = 0;
   LETTERS.forEach((letter, index) => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -654,23 +738,24 @@ function buildWheel() {
   });
   positionLetters();
 }
-function beginRound() {
-  const ids = activeIds();
-  const current = derive();
-  if (ids.length < 2 || ids[0] !== net.id || current && current.status === 'playing') return;
-  lastAnnounced = '';
-  previousRevealed = new Set();
-  clearSelection();
-  meta.set('round', { id: uniqueId(), at: Date.now(), players: ids.slice(0, 2) });
-}
 el('sound').addEventListener('click', () => {
   soundOn = !soundOn;
   if (!soundOn && 'speechSynthesis' in window) speechSynthesis.cancel();
   el('sound').textContent = soundOn ? 'Voice on' : 'Voice off';
   el('sound').setAttribute('aria-pressed', String(soundOn));
 });
-el('start').addEventListener('click', beginRound);
-el('again').addEventListener('click', beginRound);
+el('start').addEventListener('click', requestRound);
+el('join').addEventListener('click', joinRound);
+el('again').addEventListener('click', requestRound);
+el('copy-link').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(location.href);
+    gateNotice = 'Invite link copied. Send it to your teammate.';
+  } catch {
+    gateNotice = 'Copy this page address from your browser to invite your teammate.';
+  }
+  el('gate-status').textContent = gateNotice;
+});
 el('submit').addEventListener('click', submitWord);
 el('clear').addEventListener('click', clearSelection);
 el('undo').addEventListener('click', () => { chosen.pop(); drawSelection(); });
@@ -717,7 +802,6 @@ window.addEventListener('keydown', event => {
   if (index >= 0 && event.key.length === 1) chooseLetter(index);
 });
 window.addEventListener('resize', drawSelection);
-buildWheel();
 if (!('speechSynthesis' in window)) {
   soundOn = false;
   el('sound').textContent = 'Voice unavailable';
@@ -728,6 +812,7 @@ try {
   net = await library.connect({ app: APP });
   meta = net.shared('brainy-friends-meta');
   actions = net.shared('brainy-friends-actions');
+  lobby = net.shared('brainy-friends-lobby');
   net.setState({ present: true });
   net.onJoin(() => setTimeout(render, 200));
   net.onLeave(render);
